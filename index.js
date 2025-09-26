@@ -2,31 +2,28 @@ import "dotenv/config";
 import express from "express";
 import { Telegraf } from "telegraf";
 
-const {
-  BOT_TOKEN,
-  WEBHOOK_URL,   // ex: https://xxx.yyy.app/webhook
-  WEBAPP_URL     // ex: https://ton-domaine (hébergement de la webapp)
-} = process.env;
-
+const { BOT_TOKEN, WEBAPP_URL, WEBHOOK_URL } = process.env;
 if (!BOT_TOKEN) throw new Error("BOT_TOKEN manquant");
 
 const bot = new Telegraf(BOT_TOKEN);
-const app = express();
-app.use(express.json());
 
-// /start -> bouton pour ouvrir la Mini App
+// URL de ta WebApp (Netlify)
+const webAppUrl = WEBAPP_URL || "https://cosmic-haupia-9fb894.netlify.app";
+
+// /start -> bouton pour ouvrir la WebApp
 bot.start(async (ctx) => {
-  await ctx.reply(
-    "Bienvenue ! Ouvre la mini‑app ci-dessous 👇",
-    {
-      reply_markup: {
-        inline_keyboard: [[{ text: "Ouvrir l'app", web_app: { url: WEBAPP_URL } }]]
-      }
+  await ctx.reply("Bienvenue 🚀 Clique pour ouvrir l’app :", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "🌐 Ouvrir l’app", web_app: { url: webAppUrl } }]
+      ]
     }
-  );
+  });
 });
 
-// Webhook endpoint
+const app = express();
+app.use(express.json());
+app.get("/health", (_, res) => res.json({ ok: true }));
 app.post("/webhook", (req, res) => {
   bot.handleUpdate(req.body, res).catch((err) => {
     console.error("handleUpdate error:", err);
@@ -34,12 +31,10 @@ app.post("/webhook", (req, res) => {
   });
 });
 
-// Healthcheck
-app.get("/health", (_, res) => res.json({ ok: true }));
-
 const port = process.env.PORT || 3000;
 app.listen(port, async () => {
   console.log("Bot server sur port", port);
+
   if (WEBHOOK_URL) {
     try {
       await bot.telegram.setWebhook(WEBHOOK_URL);
@@ -48,6 +43,8 @@ app.listen(port, async () => {
       console.error("Erreur setWebhook:", e);
     }
   } else {
-    console.log("⚠️ Pas de WEBHOOK_URL : configure-le pour la prod.");
+    // Pas de webhook ? On lance en long polling (pratique pour tester)
+    await bot.launch();
+    console.log("Bot lancé en mode long polling.");
   }
 });
